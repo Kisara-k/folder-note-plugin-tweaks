@@ -8922,6 +8922,8 @@ var ccardProcessor = /** @class */ (function () {
                         return [4 /*yield*/, folderBrief.makeBriefCards(folderPath, notePath)];
                     case 5:
                         briefCards = _a.sent();
+                        // default to 4 columns for folder_brief_live (yaml.col overrides)
+                        briefCards.col = 4;
                         briefCards.fromYamlOptions(yaml);
                         ccardElem = briefCards.getDocElement(this.app);
                         return [2 /*return*/, ccardElem];
