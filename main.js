@@ -395,8 +395,29 @@ function buildSortOptions(settings) {
     return {
         noteKey: settings.noteSortKey || 'name',
         noteOrder: settings.noteSortOrder || 'asc',
-        folderOrder: settings.folderSortOrder || 'asc'
+        folderOrder: settings.folderSortOrder || 'asc',
+        folderCountMode: settings.folderCountMode || 'root',
+        noteCountMode: settings.noteCountMode || 'root'
     };
+}
+// recursively count all notes (TFile nodes) under a TFolder
+function countNotesDeep(folder) {
+    var count = 0;
+    for (var i = 0; i < folder.children.length; i++) {
+        var child = folder.children[i];
+        if (child.children) count += countNotesDeep(child);
+        else count++;
+    }
+    return count;
+}
+// recursively count all subfolders (TFolder nodes) under a TFolder
+function countFoldersDeep(folder) {
+    var count = 0;
+    for (var i = 0; i < folder.children.length; i++) {
+        var child = folder.children[i];
+        if (child.children) count += 1 + countFoldersDeep(child);
+    }
+    return count;
 }
 // first non-empty content line, skipping a leading YAML frontmatter block
 function firstContentLine(content) {
@@ -599,19 +620,30 @@ var FolderBrief = /** @class */ (function () {
             catch (e) { /* leave the abstract blank */ }
         }
         card.setAbstract(folderBrief);
-        // footnote: the folder summary, x folders, y notes
-        // (omit a count when it's 0, and use singular form when it's 1)
-        var subPathList = await this.app.vault.adapter.list(subFolderPath);
-        var nFolders = subPathList.folders.length;
-        var nNotes = subPathList.files.length;
+        // footnote: folder/note counts per the configured count modes
+        var folderCountMode = (this.sortOptions && this.sortOptions.folderCountMode) || 'root';
+        var noteCountMode = (this.sortOptions && this.sortOptions.noteCountMode) || 'root';
+        var nFolders = 0, nNotes = 0;
+        if (folderCountMode === 'all' || noteCountMode === 'all') {
+            var tFolder = this.app.vault.getAbstractFileByPath(subFolderPath);
+            if (tFolder && tFolder.children) {
+                if (folderCountMode === 'all') nFolders = countFoldersDeep(tFolder);
+                if (noteCountMode === 'all') nNotes = countNotesDeep(tFolder);
+            }
+        }
+        if (folderCountMode === 'root' || noteCountMode === 'root') {
+            var subPathList = await this.app.vault.adapter.list(subFolderPath);
+            if (folderCountMode === 'root') nFolders = subPathList.folders.length;
+            if (noteCountMode === 'root') nNotes = subPathList.files.length;
+        }
         var parts = [];
-        if (nFolders > 0) {
+        if (folderCountMode !== 'hide' && nFolders > 0) {
             parts.push(nFolders + (nFolders == 1 ? ' folder' : ' folders'));
         }
-        if (nNotes > 0) {
+        if (noteCountMode !== 'hide' && nNotes > 0) {
             parts.push(nNotes + (nNotes == 1 ? ' note' : ' notes'));
         }
-        var folderSummary = parts.length > 0 ? parts.join(', ') + '' : 'Empty Folder';
+        var folderSummary = parts.length > 0 ? parts.join(', ') : 'Empty Folder';
         card.setFootnote(folderSummary);
         // link behaviour: hover-preview the folder note when it exists; clicking the
         // card opens it, creating the folder note first if it doesn't exist yet.
@@ -9166,7 +9198,9 @@ var FOLDER_NOTE_DEFAULT_SETTINGS = {
     ignoredPrefixes: '',
     noteSortKey: 'name',
     noteSortOrder: 'asc',
-    folderSortOrder: 'asc'
+    folderSortOrder: 'asc',
+    folderCountMode: 'root',
+    noteCountMode: 'root'
 };
 // ------------------------------------------------------------
 // Settings Tab
@@ -9307,6 +9341,31 @@ var FolderNoteSettingTab = /** @class */ (function (_super) {
                 .setValue(_this.plugin.settings.folderSortOrder || 'asc')
                 .onChange(function (value) {
                 _this.plugin.settings.folderSortOrder = value;
+                _this.plugin.saveSettings();
+            });
+        });
+        new obsidian.Setting(containerEl)
+            .setName('Card Footnote Counts')
+            .setDesc('What to count in the folder card footnote: hide, direct children only, or all nested.')
+            .addDropdown(function (dropDown) {
+            return dropDown
+                .addOption('root', 'Folders: Direct')
+                .addOption('all', 'Folders: All')
+                .addOption('hide', 'Folders: Hide')
+                .setValue(_this.plugin.settings.folderCountMode || 'root')
+                .onChange(function (value) {
+                _this.plugin.settings.folderCountMode = value;
+                _this.plugin.saveSettings();
+            });
+        })
+            .addDropdown(function (dropDown) {
+            return dropDown
+                .addOption('root', 'Notes: Direct')
+                .addOption('all', 'Notes: All')
+                .addOption('hide', 'Notes: Hide')
+                .setValue(_this.plugin.settings.noteCountMode || 'root')
+                .onChange(function (value) {
+                _this.plugin.settings.noteCountMode = value;
                 _this.plugin.saveSettings();
             });
         });

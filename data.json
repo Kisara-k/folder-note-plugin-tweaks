@@ -10,5 +10,7 @@
   "ignoredPrefixes": "_ \nz \n.\n",
   "noteSortKey": "date",
   "noteSortOrder": "desc",
-  "folderSortOrder": "asc"
+  "folderSortOrder": "asc",
+  "folderCountMode": "hide",
+  "noteCountMode": "all"
 }
