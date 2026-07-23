@@ -212,6 +212,8 @@ var CardItem = /** @class */ (function () {
         this.title = title;
         this.abstract = "";
         this.cardStyle = style;
+        // optional custom click handler; receives newLeaf (bool). Overrides titleLink open.
+        this.linkAction = null;
     }
     CardItem.prototype.setHeadText = function (text) {
         this.headText = text;
@@ -285,7 +287,7 @@ var CardItem = /** @class */ (function () {
     CardItem.prototype.getBoxElement = function (app, imagePrefix) {
         var cardEl = document.createElement('div');
         // whole card is clickable, but the hover-preview box stays on the title only
-        if (this.titleLink) {
+        if (this.titleLink || this.linkAction) {
             cardEl.addClass('is-clickable-card');
             var self = this;
             cardEl.addEventListener('click', function (evt) {
@@ -293,7 +295,13 @@ var CardItem = /** @class */ (function () {
                 if (evt.target && evt.target.closest && evt.target.closest('a.internal-link')) {
                     return;
                 }
-                app.workspace.openLinkText(self.titleLink, '', evt.ctrlKey || evt.metaKey);
+                var newLeaf = evt.ctrlKey || evt.metaKey;
+                if (self.linkAction) {
+                    self.linkAction(newLeaf);
+                }
+                else {
+                    app.workspace.openLinkText(self.titleLink, '', newLeaf);
+                }
             });
         }
         // Heading
@@ -389,6 +397,28 @@ function buildSortOptions(settings) {
         noteOrder: settings.noteSortOrder || 'asc',
         folderOrder: settings.folderSortOrder || 'asc'
     };
+}
+// first non-empty content line, skipping a leading YAML frontmatter block
+function firstContentLine(content) {
+    var lines = content.replace(/^﻿/, '').split(/\r?\n/);
+    var i = 0;
+    while (i < lines.length && lines[i].trim().length === 0) {
+        i++;
+    }
+    // skip YAML frontmatter (--- ... --- or ... terminator)
+    if (i < lines.length && lines[i].trim() === '---') {
+        i++;
+        while (i < lines.length && lines[i].trim() !== '---' && lines[i].trim() !== '...') {
+            i++;
+        }
+        if (i < lines.length) {
+            i++;
+        }
+        while (i < lines.length && lines[i].trim().length === 0) {
+            i++;
+        }
+    }
+    return i < lines.length ? lines[i].trim() : '';
 }
 var FolderBrief = /** @class */ (function () {
     function FolderBrief(app) {
@@ -540,22 +570,28 @@ var FolderBrief = /** @class */ (function () {
     FolderBrief.prototype.makeFolderCard = async function (folderPath, subFolderPath) {
         var subFolderName = subFolderPath.split('/').pop();
         var card = new CardItem(subFolderName, CardStyle.Folder);
-        // abstract: first line of the folder note if present & valid, else blank
-        var folderBrief = '';
+        // resolve the folder's associated note (it may not exist yet)
+        var notePath = '';
+        var noteExists = false;
         if (this.folderNote) {
             try {
-                var notePath = this.folderNote.getFolderNotePath(subFolderPath)[0];
-                var noteExists = notePath && (await this.app.vault.adapter.exists(notePath));
-                if (noteExists) {
-                    var file = this.app.vault.getAbstractFileByPath(notePath);
-                    if (file && file instanceof obsidian.TFile) {
-                        var contentOrg = await this.app.vault.cachedRead(file);
-                        var firstLine = contentOrg.split(/\r?\n/)[0].trim();
-                        if (firstLine.length > 0 && !firstLine.startsWith('```')) {
-                            folderBrief = firstLine;
-                            if (folderBrief.length > this.briefMax) {
-                                folderBrief = folderBrief.substring(0, this.briefMax) + '...';
-                            }
+                notePath = this.folderNote.getFolderNotePath(subFolderPath)[0] || '';
+                noteExists = notePath && (await this.app.vault.adapter.exists(notePath));
+            }
+            catch (e) { notePath = ''; noteExists = false; }
+        }
+        // abstract: first line of the folder note if present & valid, else blank
+        var folderBrief = '';
+        if (noteExists) {
+            try {
+                var file = this.app.vault.getAbstractFileByPath(notePath);
+                if (file && file instanceof obsidian.TFile) {
+                    var contentOrg = await this.app.vault.cachedRead(file);
+                    var firstLine = firstContentLine(contentOrg);
+                    if (firstLine.length > 0 && !firstLine.startsWith('```')) {
+                        folderBrief = firstLine;
+                        if (folderBrief.length > this.briefMax) {
+                            folderBrief = folderBrief.substring(0, this.briefMax) + '...';
                         }
                     }
                 }
@@ -577,6 +613,36 @@ var FolderBrief = /** @class */ (function () {
         }
         var folderSummary = parts.length > 0 ? parts.join(', ') + '' : 'Empty Folder';
         card.setFootnote(folderSummary);
+        // link behaviour: hover-preview the folder note when it exists; clicking the
+        // card opens it, creating the folder note first if it doesn't exist yet.
+        if (this.folderNote && notePath) {
+            if (noteExists) {
+                // internal-link title -> Obsidian hover preview, like note cards
+                card.setTitleLink(notePath);
+            }
+            var folderNote = this.folderNote;
+            var app = this.app;
+            card.linkAction = async function (newLeaf) {
+                folderNote.setByFolderPath(subFolderPath);
+                var path = folderNote.notePath;
+                // use the vault index (not the raw filesystem) so we open the exact
+                // file and never spawn a duplicate in the default new-note folder.
+                var target = app.vault.getAbstractFileByPath(path);
+                if (!target) {
+                    var content = await folderNote.expandContent(folderNote.initContent || '');
+                    try {
+                        target = await app.vault.create(path, content);
+                    }
+                    catch (e) {
+                        // already exists but wasn't indexed yet; re-fetch it
+                        target = app.vault.getAbstractFileByPath(path);
+                    }
+                }
+                if (target) {
+                    await app.workspace.getLeaf(newLeaf).openFile(target);
+                }
+            };
+        }
         return card;
     };
     // make note brief card

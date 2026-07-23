@@ -1,11 +1,11 @@
 {
-  "folderNoteHide": false,
+  "folderNoteHide": true,
   "folderNoteType": "inside",
   "folderNoteName": "_about_",
   "folderNoteKey": "ctrl",
   "folderNoteAutoRename": true,
   "folderDelete2Note": false,
-  "folderNoteStrInit": "{{FOLDER_BRIEF}}\n\nLive\n{{FOLDER_BRIEF_LIVE}}",
+  "folderNoteStrInit": "{{FOLDER_BRIEF_LIVE}}",
   "folderBriefLiveColumns": 4,
   "ignoredPrefixes": "_ \nz \n.\n",
   "noteSortKey": "date",
