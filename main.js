@@ -210,7 +210,7 @@ var CardBlock = /** @class */ (function () {
 var CardItem = /** @class */ (function () {
     function CardItem(title, style) {
         this.title = title;
-        this.abstract = "No abstract.";
+        this.abstract = "";
         this.cardStyle = style;
     }
     CardItem.prototype.setHeadText = function (text) {
