@@ -8847,8 +8847,9 @@ var browser = require$$0.YAML;
 // ccards processor
 // ------------------------------------------------------------
 var ccardProcessor = /** @class */ (function () {
-    function ccardProcessor(app) {
+    function ccardProcessor(app, briefLiveColumns) {
         this.app = app;
+        this.briefLiveColumns = briefLiveColumns;
     }
     ccardProcessor.prototype.run = function (source, el, ctx, folderNote) {
         return __awaiter(this, void 0, void 0, function () {
@@ -8944,8 +8945,10 @@ var ccardProcessor = /** @class */ (function () {
                         return [4 /*yield*/, folderBrief.makeBriefCards(folderPath, notePath)];
                     case 5:
                         briefCards = _a.sent();
-                        // default to 4 columns for folder_brief_live (yaml.col overrides)
-                        briefCards.col = 4;
+                        // default columns from settings for folder_brief_live (yaml.col overrides)
+                        if (this.briefLiveColumns > 0) {
+                            briefCards.col = this.briefLiveColumns;
+                        }
                         briefCards.fromYamlOptions(yaml);
                         ccardElem = briefCards.getDocElement(this.app);
                         return [2 /*return*/, ccardElem];
@@ -8964,7 +8967,8 @@ var FOLDER_NOTE_DEFAULT_SETTINGS = {
     folderNoteKey: 'ctrl',
     folderNoteAutoRename: true,
     folderDelete2Note: false,
-    folderNoteStrInit: '# {{FOLDER_NAME}} Overview\n {{FOLDER_BRIEF_LIVE}} \n'
+    folderNoteStrInit: '# {{FOLDER_NAME}} Overview\n {{FOLDER_BRIEF_LIVE}} \n',
+    folderBriefLiveColumns: 4
 };
 // ------------------------------------------------------------
 // Settings Tab
@@ -9042,6 +9046,21 @@ var FolderNoteSettingTab = /** @class */ (function (_super) {
             }); });
             text.inputEl.rows = 8;
             text.inputEl.cols = 50;
+        });
+        new obsidian.Setting(containerEl)
+            .setName('Folder Brief Live Columns')
+            .setDesc('Number of columns for the folder brief live view. (A `col:` option in the ccard block overrides this.)')
+            .addText(function (text) {
+            text.inputEl.type = 'number';
+            return text
+                .setValue((_this.plugin.settings.folderBriefLiveColumns || 4).toString())
+                .onChange(function (value) {
+                var cols = parseInt(value, 10);
+                if (!isNaN(cols) && cols > 0) {
+                    _this.plugin.settings.folderBriefLiveColumns = cols;
+                    _this.plugin.saveSettings();
+                }
+            });
         });
         new obsidian.Setting(containerEl)
             .setName('Key for New Note')
@@ -9150,7 +9169,7 @@ var FolderNotePlugin = /** @class */ (function (_super) {
                             return __generator(this, function (_a) {
                                 switch (_a.label) {
                                     case 0:
-                                        proc = new ccardProcessor(this.app);
+                                        proc = new ccardProcessor(this.app, this.settings.folderBriefLiveColumns);
                                         return [4 /*yield*/, proc.run(source, el, ctx, this.folderNote)];
                                     case 1:
                                         _a.sent();

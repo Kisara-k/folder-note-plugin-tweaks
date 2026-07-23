@@ -5,5 +5,6 @@
   "folderNoteKey": "ctrl",
   "folderNoteAutoRename": true,
   "folderDelete2Note": false,
-  "folderNoteStrInit": "{{FOLDER_BRIEF}}\n\nLive\n{{FOLDER_BRIEF_LIVE}}"
+  "folderNoteStrInit": "{{FOLDER_BRIEF}}\n\nLive\n{{FOLDER_BRIEF_LIVE}}",
+  "folderBriefLiveColumns": 5
 }
