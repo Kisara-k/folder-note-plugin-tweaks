@@ -452,10 +452,18 @@ var FolderBrief = /** @class */ (function () {
         }
         card.setAbstract(folderBrief);
         // footnote: the folder summary, x folders, y notes
+        // (omit a count when it's 0, and use singular form when it's 1)
         var subPathList = await this.app.vault.adapter.list(subFolderPath);
-        var folderSummary = 'Contains ';
-        folderSummary += subPathList.folders.length.toString() + ' folders, ';
-        folderSummary += subPathList.files.length.toString() + ' notes.';
+        var nFolders = subPathList.folders.length;
+        var nNotes = subPathList.files.length;
+        var parts = [];
+        if (nFolders > 0) {
+            parts.push(nFolders + (nFolders == 1 ? ' folder' : ' folders'));
+        }
+        if (nNotes > 0) {
+            parts.push(nNotes + (nNotes == 1 ? ' note' : ' notes'));
+        }
+        var folderSummary = parts.length > 0 ? parts.join(', ') + '' : 'Empty Folder';
         card.setFootnote(folderSummary);
         return card;
     };
