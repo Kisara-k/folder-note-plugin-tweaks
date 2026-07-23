@@ -331,6 +331,7 @@ var FolderBrief = /** @class */ (function () {
         this.folderPath = '';
         this.briefMax = 64;
         this.noteOnly = false;
+        this.folderNote = null;
     }
     // for cards type: folder_brief
     FolderBrief.prototype.yamlFolderBrief = function (yaml) {
@@ -424,28 +425,39 @@ var FolderBrief = /** @class */ (function () {
         });
     };
     // make folder brief card
-    FolderBrief.prototype.makeFolderCard = function (folderPath, subFolderPath) {
-        return __awaiter(this, void 0, void 0, function () {
-            var subFolderName, card, subPathList, folderBrief;
-            return __generator(this, function (_a) {
-                switch (_a.label) {
-                    case 0:
-                        subFolderName = subFolderPath.split('/').pop();
-                        card = new CardItem(subFolderName, CardStyle.Folder);
-                        return [4 /*yield*/, this.app.vault.adapter.list(subFolderPath)];
-                    case 1:
-                        subPathList = _a.sent();
-                        folderBrief = 'Contains ';
-                        folderBrief += subPathList.folders.length.toString() + ' folders, ';
-                        folderBrief += subPathList.files.length.toString() + ' notes.';
-                        card.setAbstract(folderBrief);
-                        // footnote, use date in the future
-                        card.setFootnote(subFolderPath.replace(folderPath + '/', ''));
-                        // return
-                        return [2 /*return*/, card];
+    FolderBrief.prototype.makeFolderCard = async function (folderPath, subFolderPath) {
+        var subFolderName = subFolderPath.split('/').pop();
+        var card = new CardItem(subFolderName, CardStyle.Folder);
+        // abstract: first line of the folder note if present & valid, else blank
+        var folderBrief = '';
+        if (this.folderNote) {
+            try {
+                var notePath = this.folderNote.getFolderNotePath(subFolderPath)[0];
+                var noteExists = notePath && (await this.app.vault.adapter.exists(notePath));
+                if (noteExists) {
+                    var file = this.app.vault.getAbstractFileByPath(notePath);
+                    if (file && file instanceof obsidian.TFile) {
+                        var contentOrg = await this.app.vault.cachedRead(file);
+                        var firstLine = contentOrg.split(/\r?\n/)[0].trim();
+                        if (firstLine.length > 0 && !firstLine.startsWith('```')) {
+                            folderBrief = firstLine;
+                            if (folderBrief.length > this.briefMax) {
+                                folderBrief = folderBrief.substring(0, this.briefMax) + '...';
+                            }
+                        }
+                    }
                 }
-            });
-        });
+            }
+            catch (e) { /* leave the abstract blank */ }
+        }
+        card.setAbstract(folderBrief);
+        // footnote: the folder summary, x folders, y notes
+        var subPathList = await this.app.vault.adapter.list(subFolderPath);
+        var folderSummary = 'Contains ';
+        folderSummary += subPathList.folders.length.toString() + ' folders, ';
+        folderSummary += subPathList.files.length.toString() + ' notes.';
+        card.setFootnote(folderSummary);
+        return card;
     };
     // make note brief card
     FolderBrief.prototype.makeNoteCard = function (folderPath, notePath) {
@@ -874,6 +886,7 @@ var FolderNote = /** @class */ (function () {
                             .replace(/{{FOLDER_PATH}}/g, this.folderPath);
                         if (!content.contains('{{FOLDER_BRIEF}}')) return [3 /*break*/, 2];
                         folderBrief = new FolderBrief(this.app);
+                        folderBrief.folderNote = this;
                         return [4 /*yield*/, folderBrief.makeBriefCards(this.folderPath, this.notePath)];
                     case 1:
                         briefCards = _a.sent();
@@ -8912,6 +8925,7 @@ var ccardProcessor = /** @class */ (function () {
                         view = this.app.workspace.getActiveViewOfType(obsidian.MarkdownView);
                         if (!view) return [3 /*break*/, 6];
                         folderBrief = new FolderBrief(this.app);
+                        folderBrief.folderNote = folderNote;
                         // brief options
                         if (yaml.briefMax) {
                             folderBrief.briefMax = yaml.briefMax;
@@ -9174,6 +9188,7 @@ var FolderNotePlugin = /** @class */ (function (_super) {
                                             editor = view.sourceMode.cmEditor;
                                             activeFile = this.app.workspace.getActiveFile();
                                             folderBrief = new FolderBrief(this.app);
+                                            folderBrief.folderNote = this.folderNote;
                                             return [4 /*yield*/, this.folderNote.getNoteFolderBriefPath(activeFile.path)];
                                         case 1:
                                             folderPath = _a.sent();
