@@ -284,6 +284,18 @@ var CardItem = /** @class */ (function () {
     };
     CardItem.prototype.getBoxElement = function (app, imagePrefix) {
         var cardEl = document.createElement('div');
+        // whole card is clickable, but the hover-preview box stays on the title only
+        if (this.titleLink) {
+            cardEl.addClass('is-clickable-card');
+            var self = this;
+            cardEl.addEventListener('click', function (evt) {
+                // let clicks on the title link fall through to Obsidian (keeps its hover behaviour)
+                if (evt.target && evt.target.closest && evt.target.closest('a.internal-link')) {
+                    return;
+                }
+                app.workspace.openLinkText(self.titleLink, '', evt.ctrlKey || evt.metaKey);
+            });
+        }
         // Heading
         var headEl = cardEl.appendChild(document.createElement('div'));
         if (this.headImage) {

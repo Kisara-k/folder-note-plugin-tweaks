@@ -67,6 +67,10 @@ div.has-folder-note {
     box-shadow: 0 4px 5px rgba(0, 0, 0, 0.2);
 }
 
+.cute-card-view.is-clickable-card {
+    cursor: pointer;
+}
+
 .cute-card-view article {
     padding: 15px;
     flex: 1;
