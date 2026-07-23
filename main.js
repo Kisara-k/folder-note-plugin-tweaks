@@ -86,6 +86,7 @@ var CardBlock = /** @class */ (function () {
         this.cards = [];
         this.col = -1;
         this.imagePrefix = '';
+        this.grouped = false;
     }
     CardBlock.prototype.addCard = function (card) {
         this.cards.push(card);
@@ -106,6 +107,25 @@ var CardBlock = /** @class */ (function () {
                 cardDiv.appendChild(cardEl);
             }
         }
+        else if (this.grouped) { // folders and notes as separate titled sections
+            var folderCards = [];
+            var noteCards = [];
+            for (var i in this.cards) {
+                if (this.cards[i].cardStyle == CardStyle.Folder) {
+                    folderCards.push(this.cards[i]);
+                }
+                else {
+                    noteCards.push(this.cards[i]);
+                }
+            }
+            // only render a section (and its title) when it has content
+            if (folderCards.length > 0) {
+                this.appendCardSection(cardDiv, app, 'Folders', folderCards);
+            }
+            if (noteCards.length > 0) {
+                this.appendCardSection(cardDiv, app, 'Notes', noteCards);
+            }
+        }
         else { // default: this.style == 'card'
             cardDiv.addClass('cute-card-band');
             for (var i in this.cards) {
@@ -118,6 +138,22 @@ var CardBlock = /** @class */ (function () {
             }
         }
         return cardDiv;
+    };
+    // append a titled band (its own grid, so it starts on a new line)
+    CardBlock.prototype.appendCardSection = function (containerEl, app, title, cards) {
+        var titleEl = containerEl.appendChild(document.createElement('div'));
+        titleEl.addClass('cute-card-section-title');
+        titleEl.textContent = title;
+        var bandEl = containerEl.appendChild(document.createElement('div'));
+        bandEl.addClass('cute-card-band');
+        for (var i in cards) {
+            var cardEl = cards[i].getBoxElement(app, this.imagePrefix);
+            cardEl.addClass('cute-card-view');
+            bandEl.appendChild(cardEl);
+        }
+        if (this.col > 0) {
+            bandEl.setAttr('style', "grid-template-columns: repeat(" + this.col + ", 1fr);");
+        }
     };
     CardBlock.prototype.getYamlCode = function () {
         var yamlStr = '';
@@ -8978,6 +9014,8 @@ var ccardProcessor = /** @class */ (function () {
                         if (this.briefLiveColumns > 0) {
                             briefCards.col = this.briefLiveColumns;
                         }
+                        // group folders and notes into separate titled sections
+                        briefCards.grouped = true;
                         briefCards.fromYamlOptions(yaml);
                         ccardElem = briefCards.getDocElement(this.app);
                         return [2 /*return*/, ccardElem];

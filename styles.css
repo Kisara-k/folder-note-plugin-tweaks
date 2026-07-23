@@ -24,6 +24,18 @@ div.has-folder-note {
     grid-gap: 20px;
 }
 
+.cute-card-section-title {
+    width: 100%;
+    max-width: 900px;
+    margin: 20px auto 0 auto;
+    padding-left: 2px;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
 @media (min-width: 30em) {
     .cute-card-band {
         grid-template-columns: 1fr 1fr;
@@ -103,6 +115,7 @@ div.has-folder-note {
     text-align: center;
     color: #FFFFFF;
     padding: 10px;
+    display: none;
 }
 
 .cute-card-view .thumb-color-folder {
