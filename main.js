@@ -325,6 +325,15 @@ var CardItem = /** @class */ (function () {
 // ------------------------------------------------------------
 // Folder Brief
 // ------------------------------------------------------------
+// parse the ignored-prefixes setting (one prefix per line) into an array.
+// a prefix cannot start with a space (leading spaces are trimmed) but may end with one.
+function parseIgnoredPrefixes(raw) {
+    if (!raw)
+        return [];
+    return raw.split(/\r?\n/)
+        .map(function (line) { return line.replace(/^\s+/, ''); })
+        .filter(function (line) { return line.length > 0; });
+}
 var FolderBrief = /** @class */ (function () {
     function FolderBrief(app) {
         this.app = app;
@@ -332,7 +341,18 @@ var FolderBrief = /** @class */ (function () {
         this.briefMax = 64;
         this.noteOnly = false;
         this.folderNote = null;
+        // prefixes; any folder/file whose name starts with one is skipped
+        this.ignoredPrefixes = [];
     }
+    // is a folder/file name ignored by the configured prefixes?
+    FolderBrief.prototype.isIgnored = function (name) {
+        for (var i = 0; i < this.ignoredPrefixes.length; i++) {
+            if (name.startsWith(this.ignoredPrefixes[i])) {
+                return true;
+            }
+        }
+        return false;
+    };
     // for cards type: folder_brief
     FolderBrief.prototype.yamlFolderBrief = function (yaml) {
         return __awaiter(this, void 0, void 0, function () {
@@ -387,6 +407,8 @@ var FolderBrief = /** @class */ (function () {
                     case 2:
                         if (!(i < subFolderList.length)) return [3 /*break*/, 6];
                         subFolderPath = subFolderList[i];
+                        if (this.isIgnored(subFolderPath.split('/').pop()))
+                            return [3 /*break*/, 5];
                         return [4 /*yield*/, this.app.vault.adapter.exists(subFolderPath + '.md')];
                     case 3:
                         noteExists = _a.sent();
@@ -409,6 +431,8 @@ var FolderBrief = /** @class */ (function () {
                             return [3 /*break*/, 9];
                         if (subFilePath == activeNotePath)
                             return [3 /*break*/, 9]; // omit self includeing
+                        if (this.isIgnored(subFilePath.split('/').pop()))
+                            return [3 /*break*/, 9];
                         return [4 /*yield*/, this.makeNoteCard(folderPath, subFilePath)];
                     case 8:
                         noteCard = _a.sent();
@@ -622,6 +646,8 @@ var FolderNote = /** @class */ (function () {
         // for rename
         this.filesToRename = [];
         this.filesToRenameSet = false;
+        // prefixes for folders/files to skip in brief views
+        this.ignoredPrefixes = [];
     }
     // set the method
     FolderNote.prototype.setMethod = function (methodStr, indexBase) {
@@ -895,6 +921,7 @@ var FolderNote = /** @class */ (function () {
                         if (!content.contains('{{FOLDER_BRIEF}}')) return [3 /*break*/, 2];
                         folderBrief = new FolderBrief(this.app);
                         folderBrief.folderNote = this;
+                        folderBrief.ignoredPrefixes = this.ignoredPrefixes || [];
                         return [4 /*yield*/, folderBrief.makeBriefCards(this.folderPath, this.notePath)];
                     case 1:
                         briefCards = _a.sent();
@@ -8847,9 +8874,10 @@ var browser = require$$0.YAML;
 // ccards processor
 // ------------------------------------------------------------
 var ccardProcessor = /** @class */ (function () {
-    function ccardProcessor(app, briefLiveColumns) {
+    function ccardProcessor(app, briefLiveColumns, ignoredPrefixes) {
         this.app = app;
         this.briefLiveColumns = briefLiveColumns;
+        this.ignoredPrefixes = ignoredPrefixes || [];
     }
     ccardProcessor.prototype.run = function (source, el, ctx, folderNote) {
         return __awaiter(this, void 0, void 0, function () {
@@ -8935,6 +8963,7 @@ var ccardProcessor = /** @class */ (function () {
                         if (!view) return [3 /*break*/, 6];
                         folderBrief = new FolderBrief(this.app);
                         folderBrief.folderNote = folderNote;
+                        folderBrief.ignoredPrefixes = this.ignoredPrefixes;
                         // brief options
                         if (yaml.briefMax) {
                             folderBrief.briefMax = yaml.briefMax;
@@ -8968,7 +8997,8 @@ var FOLDER_NOTE_DEFAULT_SETTINGS = {
     folderNoteAutoRename: true,
     folderDelete2Note: false,
     folderNoteStrInit: '# {{FOLDER_NAME}} Overview\n {{FOLDER_BRIEF_LIVE}} \n',
-    folderBriefLiveColumns: 4
+    folderBriefLiveColumns: 4,
+    ignoredPrefixes: ''
 };
 // ------------------------------------------------------------
 // Settings Tab
@@ -9061,6 +9091,20 @@ var FolderNoteSettingTab = /** @class */ (function (_super) {
                     _this.plugin.saveSettings();
                 }
             });
+        });
+        new obsidian.Setting(containerEl)
+            .setName('Ignored Prefixes')
+            .setDesc('One prefix per line. Any folder or file whose name starts with one of these is skipped in the brief views. A prefix cannot start with a space but may end with one.')
+            .addTextArea(function (text) {
+            text
+                .setPlaceholder('_\n.\ndraft ')
+                .setValue(_this.plugin.settings.ignoredPrefixes)
+                .onChange(function (value) {
+                _this.plugin.settings.ignoredPrefixes = value;
+                _this.plugin.saveSettings();
+            });
+            text.inputEl.rows = 4;
+            text.inputEl.cols = 50;
         });
         new obsidian.Setting(containerEl)
             .setName('Key for New Note')
@@ -9169,7 +9213,7 @@ var FolderNotePlugin = /** @class */ (function (_super) {
                             return __generator(this, function (_a) {
                                 switch (_a.label) {
                                     case 0:
-                                        proc = new ccardProcessor(this.app, this.settings.folderBriefLiveColumns);
+                                        proc = new ccardProcessor(this.app, this.settings.folderBriefLiveColumns, parseIgnoredPrefixes(this.settings.ignoredPrefixes));
                                         return [4 /*yield*/, proc.run(source, el, ctx, this.folderNote)];
                                     case 1:
                                         _a.sent();
@@ -9216,6 +9260,7 @@ var FolderNotePlugin = /** @class */ (function (_super) {
                                             activeFile = this.app.workspace.getActiveFile();
                                             folderBrief = new FolderBrief(this.app);
                                             folderBrief.folderNote = this.folderNote;
+                                            folderBrief.ignoredPrefixes = this.folderNote.ignoredPrefixes || [];
                                             return [4 /*yield*/, this.folderNote.getNoteFolderBriefPath(activeFile.path)];
                                         case 1:
                                             folderPath = _a.sent();
@@ -9264,6 +9309,7 @@ var FolderNotePlugin = /** @class */ (function (_super) {
         this.folderNote = new FolderNote(this.app, this.settings.folderNoteType, this.settings.folderNoteName);
         this.folderNote.initContent = this.settings.folderNoteStrInit;
         this.folderNote.hideNoteFile = this.settings.folderNoteHide;
+        this.folderNote.ignoredPrefixes = parseIgnoredPrefixes(this.settings.ignoredPrefixes);
     };
     FolderNotePlugin.prototype.loadSettings = function () {
         return __awaiter(this, void 0, void 0, function () {

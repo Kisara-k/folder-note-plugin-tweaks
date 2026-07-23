@@ -6,5 +6,6 @@
   "folderNoteAutoRename": true,
   "folderDelete2Note": false,
   "folderNoteStrInit": "{{FOLDER_BRIEF}}\n\nLive\n{{FOLDER_BRIEF_LIVE}}",
-  "folderBriefLiveColumns": 5
+  "folderBriefLiveColumns": 4,
+  "ignoredPrefixes": "_ \nz \n.\n"
 }
