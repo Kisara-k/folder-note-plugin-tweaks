@@ -370,6 +370,14 @@ function parseIgnoredPrefixes(raw) {
         .map(function (line) { return line.replace(/^\s+/, ''); })
         .filter(function (line) { return line.length > 0; });
 }
+// build the sort options object from plugin settings
+function buildSortOptions(settings) {
+    return {
+        noteKey: settings.noteSortKey || 'name',
+        noteOrder: settings.noteSortOrder || 'asc',
+        folderOrder: settings.folderSortOrder || 'asc'
+    };
+}
 var FolderBrief = /** @class */ (function () {
     function FolderBrief(app) {
         this.app = app;
@@ -379,7 +387,39 @@ var FolderBrief = /** @class */ (function () {
         this.folderNote = null;
         // prefixes; any folder/file whose name starts with one is skipped
         this.ignoredPrefixes = [];
+        // sort options: notes by name/date, folders by name; each asc/desc
+        this.sortOptions = { noteKey: 'name', noteOrder: 'asc', folderOrder: 'asc' };
     }
+    // sort folder paths by name
+    FolderBrief.prototype.sortFolders = function (folderPaths) {
+        var order = (this.sortOptions.folderOrder === 'desc') ? -1 : 1;
+        return folderPaths.slice().sort(function (a, b) {
+            var na = a.split('/').pop().toLowerCase();
+            var nb = b.split('/').pop().toLowerCase();
+            return na < nb ? -order : (na > nb ? order : 0);
+        });
+    };
+    // sort note paths by name or last-modified date
+    FolderBrief.prototype.sortNotes = function (filePaths) {
+        var self = this;
+        var byDate = (this.sortOptions.noteKey === 'date');
+        var order = (this.sortOptions.noteOrder === 'desc') ? -1 : 1;
+        var keyed = filePaths.map(function (p) {
+            var key;
+            if (byDate) {
+                var f = self.app.vault.getAbstractFileByPath(p);
+                key = (f && f.stat) ? f.stat.mtime : 0;
+            }
+            else {
+                key = p.split('/').pop().toLowerCase();
+            }
+            return { path: p, key: key };
+        });
+        keyed.sort(function (a, b) {
+            return a.key < b.key ? -order : (a.key > b.key ? order : 0);
+        });
+        return keyed.map(function (x) { return x.path; });
+    };
     // is a folder/file name ignored by the configured prefixes?
     FolderBrief.prototype.isIgnored = function (name) {
         for (var i = 0; i < this.ignoredPrefixes.length; i++) {
@@ -435,8 +475,8 @@ var FolderBrief = /** @class */ (function () {
                         return [4 /*yield*/, this.app.vault.adapter.list(folderPath)];
                     case 1:
                         pathList = _a.sent();
-                        subFolderList = pathList.folders;
-                        subFileList = pathList.files;
+                        subFolderList = this.sortFolders(pathList.folders);
+                        subFileList = this.sortNotes(pathList.files);
                         if (!!this.noteOnly) return [3 /*break*/, 6];
                         i = 0;
                         _a.label = 2;
@@ -684,6 +724,8 @@ var FolderNote = /** @class */ (function () {
         this.filesToRenameSet = false;
         // prefixes for folders/files to skip in brief views
         this.ignoredPrefixes = [];
+        // sort options for brief views
+        this.sortOptions = { noteKey: 'name', noteOrder: 'asc', folderOrder: 'asc' };
     }
     // set the method
     FolderNote.prototype.setMethod = function (methodStr, indexBase) {
@@ -958,6 +1000,9 @@ var FolderNote = /** @class */ (function () {
                         folderBrief = new FolderBrief(this.app);
                         folderBrief.folderNote = this;
                         folderBrief.ignoredPrefixes = this.ignoredPrefixes || [];
+                        if (this.sortOptions) {
+                            folderBrief.sortOptions = this.sortOptions;
+                        }
                         return [4 /*yield*/, folderBrief.makeBriefCards(this.folderPath, this.notePath)];
                     case 1:
                         briefCards = _a.sent();
@@ -8910,10 +8955,11 @@ var browser = require$$0.YAML;
 // ccards processor
 // ------------------------------------------------------------
 var ccardProcessor = /** @class */ (function () {
-    function ccardProcessor(app, briefLiveColumns, ignoredPrefixes) {
+    function ccardProcessor(app, briefLiveColumns, ignoredPrefixes, sortOptions) {
         this.app = app;
         this.briefLiveColumns = briefLiveColumns;
         this.ignoredPrefixes = ignoredPrefixes || [];
+        this.sortOptions = sortOptions;
     }
     ccardProcessor.prototype.run = function (source, el, ctx, folderNote) {
         return __awaiter(this, void 0, void 0, function () {
@@ -9000,6 +9046,9 @@ var ccardProcessor = /** @class */ (function () {
                         folderBrief = new FolderBrief(this.app);
                         folderBrief.folderNote = folderNote;
                         folderBrief.ignoredPrefixes = this.ignoredPrefixes;
+                        if (this.sortOptions) {
+                            folderBrief.sortOptions = this.sortOptions;
+                        }
                         // brief options
                         if (yaml.briefMax) {
                             folderBrief.briefMax = yaml.briefMax;
@@ -9036,7 +9085,10 @@ var FOLDER_NOTE_DEFAULT_SETTINGS = {
     folderDelete2Note: false,
     folderNoteStrInit: '# {{FOLDER_NAME}} Overview\n {{FOLDER_BRIEF_LIVE}} \n',
     folderBriefLiveColumns: 4,
-    ignoredPrefixes: ''
+    ignoredPrefixes: '',
+    noteSortKey: 'name',
+    noteSortOrder: 'asc',
+    folderSortOrder: 'asc'
 };
 // ------------------------------------------------------------
 // Settings Tab
@@ -9145,6 +9197,42 @@ var FolderNoteSettingTab = /** @class */ (function (_super) {
             text.inputEl.cols = 50;
         });
         new obsidian.Setting(containerEl)
+            .setName('Notes Sort Order')
+            .setDesc('Sort notes in the brief views by name or last-modified date, ascending or descending.')
+            .addDropdown(function (dropDown) {
+            return dropDown
+                .addOption('name', 'Name')
+                .addOption('date', 'Date Modified')
+                .setValue(_this.plugin.settings.noteSortKey || 'name')
+                .onChange(function (value) {
+                _this.plugin.settings.noteSortKey = value;
+                _this.plugin.saveSettings();
+            });
+        })
+            .addDropdown(function (dropDown) {
+            return dropDown
+                .addOption('asc', 'Ascending')
+                .addOption('desc', 'Descending')
+                .setValue(_this.plugin.settings.noteSortOrder || 'asc')
+                .onChange(function (value) {
+                _this.plugin.settings.noteSortOrder = value;
+                _this.plugin.saveSettings();
+            });
+        });
+        new obsidian.Setting(containerEl)
+            .setName('Folder Sort Order')
+            .setDesc('Ascending or descending order for folders (by name).')
+            .addDropdown(function (dropDown) {
+            return dropDown
+                .addOption('asc', 'Ascending')
+                .addOption('desc', 'Descending')
+                .setValue(_this.plugin.settings.folderSortOrder || 'asc')
+                .onChange(function (value) {
+                _this.plugin.settings.folderSortOrder = value;
+                _this.plugin.saveSettings();
+            });
+        });
+        new obsidian.Setting(containerEl)
             .setName('Key for New Note')
             .setDesc('Key + Click a folder to create folder note file. ')
             .addDropdown(function (dropDown) {
@@ -9251,7 +9339,7 @@ var FolderNotePlugin = /** @class */ (function (_super) {
                             return __generator(this, function (_a) {
                                 switch (_a.label) {
                                     case 0:
-                                        proc = new ccardProcessor(this.app, this.settings.folderBriefLiveColumns, parseIgnoredPrefixes(this.settings.ignoredPrefixes));
+                                        proc = new ccardProcessor(this.app, this.settings.folderBriefLiveColumns, parseIgnoredPrefixes(this.settings.ignoredPrefixes), buildSortOptions(this.settings));
                                         return [4 /*yield*/, proc.run(source, el, ctx, this.folderNote)];
                                     case 1:
                                         _a.sent();
@@ -9299,6 +9387,9 @@ var FolderNotePlugin = /** @class */ (function (_super) {
                                             folderBrief = new FolderBrief(this.app);
                                             folderBrief.folderNote = this.folderNote;
                                             folderBrief.ignoredPrefixes = this.folderNote.ignoredPrefixes || [];
+                                            if (this.folderNote.sortOptions) {
+                                                folderBrief.sortOptions = this.folderNote.sortOptions;
+                                            }
                                             return [4 /*yield*/, this.folderNote.getNoteFolderBriefPath(activeFile.path)];
                                         case 1:
                                             folderPath = _a.sent();
@@ -9348,6 +9439,7 @@ var FolderNotePlugin = /** @class */ (function (_super) {
         this.folderNote.initContent = this.settings.folderNoteStrInit;
         this.folderNote.hideNoteFile = this.settings.folderNoteHide;
         this.folderNote.ignoredPrefixes = parseIgnoredPrefixes(this.settings.ignoredPrefixes);
+        this.folderNote.sortOptions = buildSortOptions(this.settings);
     };
     FolderNotePlugin.prototype.loadSettings = function () {
         return __awaiter(this, void 0, void 0, function () {
